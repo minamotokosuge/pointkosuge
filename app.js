@@ -1,27 +1,16 @@
 /**
  * app.js
  * PWA logic for "Kosuge Villager Point Card" system.
- * Handles QR code scanning, offline data storage (IndexedDB),
+ * Handles QR code scanner input (as keyboard input), offline data storage (IndexedDB),
  * and synchronization with Google Apps Script.
  */
 
-// Import ZXing library (can be hosted locally or via CDN)
-// For local hosting, download zxing-js/library from npm or GitHub and include via script tag.
-// For simplicity in this example, we'll assume it's available.
-// In a real deployment, you might use:
-// import { BrowserQRCodeReader } from '@zxing/library';
-// For this example, we'll use a simplified direct inclusion or rely on it being globally available
-// if included via a <script> tag before this file.
-// Or, for a simple CDN include:
-// <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
-// We'll proceed assuming `ZXing.BrowserQRCodeReader` is available.
+const scanInput = document.getElementById('scan-input');
+const scanResultDiv = document.getElementById('scan-result');
+const scanResultMessage = scanResultDiv.querySelector('.message');
+const scanResultMemberId = scanResultDiv.querySelector('.member-id');
 
-const videoElement = document.getElementById('qr-reader-video');
-const qrOverlay = document.getElementById('qr-reader-overlay');
-const startScanButton = document.getElementById('start-scan');
-const stopScanButton = document.getElementById('stop-scan');
 const syncDataButton = document.getElementById('sync-data');
-const manualInputButton = document.getElementById('manual-input');
 const resetButton = document.getElementById('reset-device');
 const currentStatusSpan = document.getElementById('current-status');
 const offlineQueueCountSpan = document.getElementById('offline-queue-count');
@@ -32,17 +21,17 @@ const storeIdInput = document.getElementById('store-id');
 const pointValueInput = document.getElementById('point-value');
 const saveSettingsButton = document.getElementById('save-settings');
 
-let qrCodeReader;
-let mediaStream;
-let isScanning = false;
-
 const DB_NAME = 'PointCardDB';
 const STORE_NAME = 'pointQueue';
 const SETTINGS_KEY = 'pointCardSettings';
 const LAST_SYNC_KEY = 'lastSyncTime';
+const DEVICE_ID_KEY = 'deviceId'; // Key for storing unique device ID
 
 let settings = {}; // { appsScriptUrl, storeId, pointValue }
-let deviceId = crypto.randomUUID(); // Unique ID for this device
+let deviceId = localStorage.getItem(DEVICE_ID_KEY) || crypto.randomUUID(); // Get existing or generate new device ID
+
+// Store device ID in localStorage
+localStorage.setItem(DEVICE_ID_KEY, deviceId);
 
 // --- IndexedDB Helper Functions ---
 async function openDB() {
@@ -127,136 +116,78 @@ function saveSettings() {
     settings.storeId = storeIdInput.value.trim();
     settings.pointValue = parseInt(pointValueInput.value.trim(), 10);
 
-    if (!settings.appsScriptUrl || !settings.storeId || isNaN(settings.pointValue) || settings.pointValue <= 0) {
-        alert('設定をすべて入力してください。');
+    if (!settings.appsScriptUrl || !settings.appsScriptUrl.endsWith('/exec') || !settings.storeId || isNaN(settings.pointValue) || settings.pointValue <= 0) {
+        alert('Apps Script URLは「/exec」で終わり、店舗ID、付与ポイント数を正しく入力してください。');
         return;
     }
 
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     alert('設定を保存しました！');
+    scanInput.focus(); // 設定保存後、読み取りフィールドにフォーカス
 }
 
-// --- QR Code Scanning ---
-async function startScan() {
-    if (!settings.appsScriptUrl || !settings.storeId || !settings.pointValue) {
-        alert('先にApps Script URL, 店舗ID, 付与ポイント数を設定して保存してください。');
-        return;
-    }
+// --- QR Code Reader Input Handling ---
+scanInput.addEventListener('keypress', async (event) => {
+    // Check if the Enter key was pressed (key code 13)
+    if (event.key === 'Enter') {
+        event.preventDefault(); // Prevent default form submission or new line in input
+        const memberId = scanInput.value.trim();
+        scanInput.value = ''; // Clear the input field immediately
 
-    if (isScanning) return;
-    isScanning = true;
-    startScanButton.disabled = true;
-    stopScanButton.disabled = false;
-    currentStatusSpan.textContent = 'スキャン中...';
-    qrOverlay.textContent = 'QRコードを読み取り中...';
-
-    try {
-        // カメラ設定: 背面カメラを優先します
-        const constraints = {
-            video: {
-                facingMode: 'environment' // 'environment' で背面カメラを指定
-                // 必要であれば、以下のオプションも試せます（すべてのデバイスでサポートされるわけではありません）
-                // width: { ideal: 1280 }, // 解像度の指定
-                // height: { ideal: 720 },
-                // advanced: [{ focusMode: 'continuous' }] // 連続オートフォーカス
-            }
-        };
-
-        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        videoElement.srcObject = mediaStream;
-        await videoElement.play();
-
-        if (typeof ZXing === 'undefined' || !ZXing.BrowserQRCodeReader) {
-            alert('ZXingライブラリがロードされていません。');
-            console.error('ZXing library not found.');
-            isScanning = false;
-            stopScan();
+        if (!settings.appsScriptUrl || !settings.storeId || !settings.pointValue) {
+            alert('先にApps Script URL, 店舗ID, 付与ポイント数を設定して保存してください。');
+            currentStatusSpan.textContent = '設定未完了';
+            currentStatusSpan.className = 'error';
             return;
         }
 
-        qrCodeReader = new ZXing.BrowserQRCodeReader();
-        qrCodeReader.decodeFromVideoElement(videoElement, (result, err) => {
-            if (result) {
-                console.log('QR Code detected:', result.getText());
-                processQRCode(result.getText());
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error('QR code scan error:', err);
-                qrOverlay.textContent = 'エラー: ' + err.message;
-            }
-        });
-    } catch (err) {
-        console.error('Failed to get camera access:', err);
-        currentStatusSpan.textContent = `カメラアクセスエラー: ${err.message}`;
-        alert('カメラアクセスを許可してください。\nエラー: ' + err.message);
-        isScanning = false;
-        stopScan();
-    }
-}
-
-function stopScan() {
-    if (!isScanning) return;
-    isScanning = false;
-    startScanButton.disabled = false;
-    stopScanButton.disabled = true;
-    currentStatusSpan.textContent = 'スキャン停止中';
-    qrOverlay.textContent = 'スキャン停止';
-
-    if (qrCodeReader) {
-        qrCodeReader.reset();
-        qrCodeReader = null;
-    }
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        videoElement.srcObject = null;
-    }
-}
-
-async function processQRCode(qrData) {
-    // Assuming QR data is the 14-digit member ID
-    const memberId = qrData.trim();
-    if (memberId.length === 14 && /^\d+$/.test(memberId)) {
-        await addEntry(memberId);
-        updateQueueCount();
-        currentStatusSpan.textContent = `ポイント追加: ${memberId} (オフラインキューに保存)`;
-        qrOverlay.textContent = `✅ 読み取り成功！ ${memberId}`;
-        // Briefly show success then reset overlay
-        setTimeout(() => {
-            qrOverlay.textContent = 'QRコードを読み取り中...';
-        }, 2000);
-    } else {
-        currentStatusSpan.textContent = `無効なQRコード: ${qrData}`;
-        qrOverlay.textContent = `❌ 無効なQRコード`;
-        // Briefly show error then reset overlay
-        setTimeout(() => {
-            qrOverlay.textContent = 'QRコードを読み取り中...';
-        }, 2000);
-    }
-}
-
-// --- Manual Input ---
-async function manualInput() {
-    const memberId = prompt('会員番号を14桁で入力してください:');
-    if (memberId) {
-        const trimmedMemberId = memberId.trim();
-        if (trimmedMemberId.length === 14 && /^\d+$/.test(trimmedMemberId)) {
-            await addEntry(trimmedMemberId);
+        if (memberId.length === 14 && /^\d+$/.test(memberId)) {
+            await addEntry(memberId);
             updateQueueCount();
-            currentStatusSpan.textContent = `ポイント追加 (手動): ${trimmedMemberId} (オフラインキューに保存)`;
+            currentStatusSpan.textContent = `ポイント追加: ${memberId} (オフラインキューに保存)`;
+            currentStatusSpan.className = 'success';
+            displayScanResult('読み取りました！', memberId);
         } else {
-            alert('無効な会員番号です。14桁の数字を入力してください。');
+            currentStatusSpan.textContent = `無効な会員番号: ${memberId}`;
+            currentStatusSpan.className = 'error';
+            displayScanResult('読み取り失敗', '無効な会員番号');
+            setTimeout(() => clearScanResult(), 3000); // Clear after 3 seconds
         }
+        scanInput.focus(); // Re-focus the input for the next scan
     }
+});
+
+// For iOS, the virtual keyboard often pops up when an input field is focused.
+// To keep the virtual keyboard hidden and still allow scanner input,
+// make the input field read-only and listen for keydown/keypress on the document.
+// However, if using an external scanner that sends keyboard inputs,
+// simply focusing the input field and letting the scanner type into it is usually enough.
+// The current setup should work if the scanner sends an Enter key at the end.
+
+function displayScanResult(message, memberId) {
+    scanResultMessage.textContent = message;
+    scanResultMemberId.textContent = memberId;
+    // Set a timeout to clear the message after a few seconds
+    setTimeout(() => {
+        clearScanResult();
+    }, 3000); // Message disappears after 3 seconds
+}
+
+function clearScanResult() {
+    scanResultMessage.textContent = '';
+    scanResultMemberId.textContent = '';
 }
 
 // --- Data Synchronization ---
 async function syncData() {
     currentStatusSpan.textContent = '同期中...';
+    currentStatusSpan.className = 'info';
     syncDataButton.disabled = true;
     const entries = await getAllEntries();
 
     if (entries.length === 0) {
         currentStatusSpan.textContent = '同期するデータがありません。';
+        currentStatusSpan.className = 'info';
         syncDataButton.disabled = false;
         return;
     }
@@ -286,22 +217,35 @@ async function syncData() {
             localStorage.setItem(LAST_SYNC_KEY, now.toString());
             lastSyncTimeSpan.textContent = new Date(now).toLocaleString();
             currentStatusSpan.textContent = `同期成功: ${result.message}`;
+            currentStatusSpan.className = 'success';
 
             // Also inform Apps Script that this device just synced
-            await fetch(settings.appsScriptUrl.replace('/exec', '/dev'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'updateLastSyncTime', deviceId: deviceId })
-            });
+            const updateSyncPayload = {
+                action: 'updateLastSyncTime',
+                deviceId: deviceId
+            };
+            try {
+                await fetch(settings.appsScriptUrl, { // Send to the same URL
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateSyncPayload)
+                });
+                console.log('Last sync time updated on Apps Script.');
+            } catch (syncTimeError) {
+                console.warn('Failed to update last sync time on Apps Script:', syncTimeError);
+            }
 
         } else {
             currentStatusSpan.textContent = `同期失敗: ${result.message || '不明なエラー'}`;
+            currentStatusSpan.className = 'error';
         }
     } catch (error) {
         console.error('Sync error:', error);
         currentStatusSpan.textContent = `同期エラー: ${error.message}. (データは端末に保持されています)`;
+        currentStatusSpan.className = 'error';
     } finally {
         syncDataButton.disabled = false;
+        scanInput.focus(); // Re-focus input after sync attempt
     }
 }
 
@@ -310,51 +254,4 @@ function resetDevice() {
     if (confirm('端末設定と未同期データをすべてリセットします。よろしいですか？')) {
         localStorage.clear(); // Clear all localStorage settings
         indexedDB.deleteDatabase(DB_NAME); // Delete IndexedDB
-        deviceId = crypto.randomUUID(); // Generate new device ID
-        settings = {}; // Clear in-memory settings
-        appsScriptUrlInput.value = '';
-        storeIdInput.value = '';
-        pointValueInput.value = '';
-        offlineQueueCountSpan.textContent = '0';
-        lastSyncTimeSpan.textContent = '未同期';
-        currentStatusSpan.textContent = '端末がリセットされました。';
-        alert('端末が完全にリセットされました。再設定してください。');
-        stopScan();
-    }
-}
-
-// --- Service Worker Registration ---
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js')
-            .then(registration => {
-                console.log('Service Worker registered with scope:', registration.scope);
-            })
-            .catch(error => {
-                console.error('Service Worker registration failed:', error);
-            });
-    }
-}
-
-// --- Event Listeners ---
-saveSettingsButton.addEventListener('click', saveSettings);
-startScanButton.addEventListener('click', startScan);
-stopScanButton.addEventListener('click', stopScan);
-syncDataButton.addEventListener('click', syncData);
-manualInputButton.addEventListener('click', manualInput);
-resetButton.addEventListener('click', resetDevice);
-
-// --- Initialize PWA ---
-window.addEventListener('load', () => {
-    loadSettings();
-    updateQueueCount();
-    registerServiceWorker();
-
-    // Periodically attempt to sync if online and queue is not empty
-    setInterval(async () => {
-        if (navigator.onLine && (await getAllEntries()).length > 0) {
-            console.log('Online and queue not empty, attempting auto-sync...');
-            syncData();
-        }
-    }, 60 * 1000); // Every 1 minute
-});
+        deviceId = crypto.randomUUID(); //
