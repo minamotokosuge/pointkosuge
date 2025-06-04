@@ -151,7 +151,7 @@ async function startScan() {
     qrOverlay.textContent = 'QRコードを読み取り中...';
 
     try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); // Use 'environment' for back camera
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }); // Use 'environment' for back camera
         videoElement.srcObject = mediaStream;
         await videoElement.play();
 
