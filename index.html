@@ -2,87 +2,131 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>こすげ村人ポイントカード</title>
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <meta name="theme-color" content="#006400">
     <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f0f0f0; color: #333; }
-        h1 { color: #006400; text-align: center; }
-        #settings {
-            background-color: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f4f8; color: #333; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        h1 { color: #006400; text-align: center; margin-bottom: 25px; font-size: 2em; }
+        .container {
+            background-color: #fff; border-radius: 12px; padding: 25px; margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 500px;
         }
-        #settings label { display: block; margin-bottom: 5px; font-weight: bold; }
-        #settings input, #settings select {
-            width: calc(100% - 20px); padding: 10px; margin-bottom: 15px; border: 1px solid #ddd;
-            border-radius: 4px; font-size: 16px;
+        h2 { color: #006400; margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input[type="text"], input[type="number"] {
+            width: calc(100% - 22px); padding: 12px; margin-bottom: 18px; border: 1px solid #cce0dd;
+            border-radius: 6px; font-size: 16px; box-sizing: border-box;
         }
-        #settings button {
-            background-color: #007bff; color: white; padding: 10px 15px; border: none;
-            border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%;
+        button {
+            background-color: #007bff; color: white; padding: 12px 20px; border: none;
+            border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%;
+            transition: background-color 0.3s ease; margin-bottom: 10px;
         }
-        #settings button:hover { background-color: #0056b3; }
-        #qr-reader-container {
-            position: relative; width: 100%; max-width: 400px; margin: 0 auto 20px auto;
-            border: 2px dashed #ccc; border-radius: 8px; overflow: hidden;
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+
+        #scan-input-area {
+            text-align: center;
+            margin-top: 25px;
         }
-        #qr-reader-video {
-            width: 100%; height: auto; display: block; /* transform: scaleX(-1); /* この行を削除またはコメントアウト */
+        #scan-input {
+            font-size: 1.5em;
+            padding: 15px;
+            border: 2px solid #006400;
+            border-radius: 8px;
+            width: calc(100% - 34px);
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #e6ffe6;
         }
-        #qr-reader-overlay {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            display: flex; justify-content: center; align-items: center;
-            color: white; font-size: 20px; text-shadow: 1px 1px 2px black;
+        #scan-result {
+            min-height: 80px; /* メッセージ表示のためのスペース確保 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 2px dashed #006400;
+            border-radius: 12px;
+            padding: 15px;
+            background-color: #f8fcf8;
+            font-size: 1.2em;
+            color: #006400;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 15px;
         }
-        #controls { text-align: center; margin-top: 20px; }
-        #controls button {
-            background-color: #28a745; color: white; padding: 12px 20px; border: none;
-            border-radius: 5px; cursor: pointer; font-size: 18px; margin: 5px;
+        #scan-result .message {
+            font-size: 1.5em;
+            color: #28a745;
+            margin-bottom: 5px;
         }
-        #controls button:hover { background-color: #218838; }
+        #scan-result .member-id {
+            font-size: 1.8em;
+            color: #333;
+        }
+
+        #controls { text-align: center; margin-top: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        #controls button { margin-bottom: 0; }
+        #sync-data { background-color: #28a745; }
+        #sync-data:hover:not(:disabled) { background-color: #218838; }
+        #reset-device { background-color: #6c757d; }
+        #reset-device:hover:not(:disabled) { background-color: #5a6268; }
+
         #status {
-            background-color: #e9ecef; border-radius: 8px; padding: 15px; margin-top: 20px;
-            font-size: 14px; text-align: center;
+            background-color: #e9ecef; border-radius: 12px; padding: 18px; margin-top: 25px;
+            font-size: 15px; text-align: center; border: 1px solid #dee2e6;
         }
-        #offline-queue-count { font-weight: bold; color: #dc3545; }
-        .success { color: green; }
-        .error { color: red; }
+        #offline-queue-count { font-weight: bold; color: #dc3545; font-size: 1.1em; }
+        #last-sync-time { font-weight: bold; color: #007bff; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .info { color: #007bff; font-weight: bold; }
+
+        @media (max-width: 600px) {
+            body { padding: 15px; }
+            .container { padding: 20px; }
+            h1 { font-size: 1.8em; }
+            #controls { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
     <h1>こすげ村人ポイントカード</h1>
 
-    <div id="settings">
+    <div id="settings" class="container">
         <h2>設定</h2>
         <label for="apps-script-url">Apps Script Web App URL:</label>
-        <input type="text" id="apps-script-url" placeholder="https://script.google.com/macros/s/AKfycbwzbuRMG1XcOz928BvUoxONcqEb7R3EqLHSPfOTFKQ6HOxWLZ_e6OfiyMcIlRVVCBpG/exec">
-        <label for="store-id">店舗ID:</label>
-        <input type="text" id="store-id" placeholder="例: 道の駅">
+        <input type="text" id="apps-script-url" placeholder="Your Apps Script Web App URL (末尾 /exec)">
+        <label for="store-id">店舗ID (例: 道の駅):</label>
+        <input type="text" id="store-id" placeholder="半角英数字でユニークなID">
         <label for="point-value">付与ポイント数:</label>
         <input type="number" id="point-value" min="1" value="1" placeholder="例: 1">
         <button id="save-settings">設定を保存</button>
     </div>
 
-    <div id="qr-reader-container">
-        <video id="qr-reader-video" playsinline></video>
-        <div id="qr-reader-overlay">QRコードを読み取り中...</div>
+    <div id="scan-input-area" class="container">
+        <h2>QRコード読み取り</h2>
+        <input type="text" id="scan-input" placeholder="QRコードをスキャンしてください" autofocus>
+        <div id="scan-result">
+            <span class="message"></span>
+            <span class="member-id"></span>
+        </div>
     </div>
 
-    <div id="controls">
-        <button id="start-scan">スキャン開始</button>
-        <button id="stop-scan" disabled>スキャン停止</button>
-        <button id="manual-input">手動入力</button>
+    <div id="controls" class="container">
         <button id="sync-data">データ同期</button>
         <button id="reset-device">端末リセット</button>
     </div>
 
-    <div id="status">
-        <p>ステータス: <span id="current-status">準備完了</span></p>
+    <div id="status" class="container">
+        <p>ステータス: <span id="current-status" class="info">準備完了</span></p>
         <p>オフラインキュー: <span id="offline-queue-count">0</span>件</p>
         <p>最終同期: <span id="last-sync-time">未同期</span></p>
     </div>
 
- <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
