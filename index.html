@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>こすげ村人ポイントカード</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f0f0f0; color: #333; }
+        h1 { color: #006400; text-align: center; }
+        #settings {
+            background-color: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #settings label { display: block; margin-bottom: 5px; font-weight: bold; }
+        #settings input, #settings select {
+            width: calc(100% - 20px); padding: 10px; margin-bottom: 15px; border: 1px solid #ddd;
+            border-radius: 4px; font-size: 16px;
+        }
+        #settings button {
+            background-color: #007bff; color: white; padding: 10px 15px; border: none;
+            border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%;
+        }
+        #settings button:hover { background-color: #0056b3; }
+        #qr-reader-container {
+            position: relative; width: 100%; max-width: 400px; margin: 0 auto 20px auto;
+            border: 2px dashed #ccc; border-radius: 8px; overflow: hidden;
+        }
+        #qr-reader-video {
+            width: 100%; height: auto; display: block; transform: scaleX(-1); /* Mirror effect for selfie camera */
+        }
+        #qr-reader-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; justify-content: center; align-items: center;
+            color: white; font-size: 20px; text-shadow: 1px 1px 2px black;
+        }
+        #controls { text-align: center; margin-top: 20px; }
+        #controls button {
+            background-color: #28a745; color: white; padding: 12px 20px; border: none;
+            border-radius: 5px; cursor: pointer; font-size: 18px; margin: 5px;
+        }
+        #controls button:hover { background-color: #218838; }
+        #status {
+            background-color: #e9ecef; border-radius: 8px; padding: 15px; margin-top: 20px;
+            font-size: 14px; text-align: center;
+        }
+        #offline-queue-count { font-weight: bold; color: #dc3545; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>こすげ村人ポイントカード</h1>
+
+    <div id="settings">
+        <h2>設定</h2>
+        <label for="apps-script-url">Apps Script Web App URL:</label>
+        <input type="text" id="apps-script-url" placeholder="Your Apps Script Web App URL">
+        <label for="store-id">店舗ID:</label>
+        <input type="text" id="store-id" placeholder="例: 道の駅">
+        <label for="point-value">付与ポイント数:</label>
+        <input type="number" id="point-value" min="1" value="1" placeholder="例: 1">
+        <button id="save-settings">設定を保存</button>
+    </div>
+
+    <div id="qr-reader-container">
+        <video id="qr-reader-video" playsinline></video>
+        <div id="qr-reader-overlay">QRコードを読み取り中...</div>
+    </div>
+
+    <div id="controls">
+        <button id="start-scan">スキャン開始</button>
+        <button id="stop-scan" disabled>スキャン停止</button>
+        <button id="manual-input">手動入力</button>
+        <button id="sync-data">データ同期</button>
+        <button id="reset-device">端末リセット</button>
+    </div>
+
+    <div id="status">
+        <p>ステータス: <span id="current-status">準備完了</span></p>
+        <p>オフラインキュー: <span id="offline-queue-count">0</span>件</p>
+        <p>最終同期: <span id="last-sync-time">未同期</span></p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
