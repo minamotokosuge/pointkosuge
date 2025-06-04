@@ -151,7 +151,18 @@ async function startScan() {
     qrOverlay.textContent = 'QRコードを読み取り中...';
 
     try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }); // Use 'environment' for back camera
+        // カメラ設定: 背面カメラを優先します
+        const constraints = {
+            video: {
+                facingMode: 'environment' // 'environment' で背面カメラを指定
+                // 必要であれば、以下のオプションも試せます（すべてのデバイスでサポートされるわけではありません）
+                // width: { ideal: 1280 }, // 解像度の指定
+                // height: { ideal: 720 },
+                // advanced: [{ focusMode: 'continuous' }] // 連続オートフォーカス
+            }
+        };
+
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         videoElement.srcObject = mediaStream;
         await videoElement.play();
 
